@@ -45,6 +45,7 @@ namespace FMBot.Bot.Commands.LastFM
         private readonly WhoKnowsService _whoKnowsService;
         private readonly WhoKnowsArtistService _whoKnowArtistService;
         private readonly WhoKnowsPlayService _whoKnowsPlayService;
+        private readonly InvocationService _invocationService;
 
         private InteractivityService Interactivity { get; }
 
@@ -64,6 +65,7 @@ namespace FMBot.Bot.Commands.LastFM
                 WhoKnowsPlayService whoKnowsPlayService,
                 InteractivityService interactivity,
                 WhoKnowsService whoKnowsService,
+                InvocationService invocationService,
                 IOptions<BotSettings> botSettings) : base(botSettings)
         {
             this._artistsService = artistsService;
@@ -81,6 +83,7 @@ namespace FMBot.Bot.Commands.LastFM
             this._whoKnowsPlayService = whoKnowsPlayService;
             this.Interactivity = interactivity;
             this._whoKnowsService = whoKnowsService;
+            this._invocationService = invocationService;
         }
 
         [Command("artist", RunMode = RunMode.Async)]
@@ -200,15 +203,19 @@ namespace FMBot.Bot.Commands.LastFM
             "artisttracks DMX")]
         [Alias("at", "att", "artisttrack", "artist track", "artist tracks", "artistrack", "artisttoptracks", "artisttoptrack", "favs")]
         [UsernameSetRequired]
+        [Targetable]
         public async Task ArtistTracksAsync([Remainder] string artistValues = null)
         {
+            var invkContext = this._invocationService.GetContext(this.Context.Message);
             var contextUser = await this._userService.GetUserSettingsAsync(this.Context.User);
+            var targetUser = await this._userService.GetUserSettingsAsync(invkContext.Target);
+            artistValues = String.Join(" ", invkContext.CleanArgs);
 
             _ = this.Context.Channel.TriggerTypingAsync();
 
             var timeSettings = SettingService.GetTimePeriod(artistValues, TimePeriod.AllTime);
 
-            var artist = await GetArtist(artistValues, contextUser.UserNameLastFM, contextUser.SessionKeyLastFm);
+            var artist = await GetArtist(artistValues, targetUser.UserNameLastFM, targetUser.SessionKeyLastFm);
             if (artist == null)
             {
                 return;
@@ -227,14 +234,14 @@ namespace FMBot.Bot.Commands.LastFM
             switch (timeSettings.TimePeriod)
             {
                 case TimePeriod.Weekly:
-                    topTracks = await this._playService.GetTopTracksForArtist(contextUser.UserId, 7, artist.ArtistName);
+                    topTracks = await this._playService.GetTopTracksForArtist(targetUser.UserId, 7, artist.ArtistName);
                     break;
                 case TimePeriod.Monthly:
-                    topTracks = await this._playService.GetTopTracksForArtist(contextUser.UserId, 31, artist.ArtistName);
+                    topTracks = await this._playService.GetTopTracksForArtist(targetUser.UserId, 31, artist.ArtistName);
                     break;
                 default:
                     timeDescription = "alltime";
-                    topTracks = await this._artistsService.GetTopTracksForArtist(contextUser.UserId, artist.ArtistName);
+                    topTracks = await this._artistsService.GetTopTracksForArtist(targetUser.UserId, artist.ArtistName);
                     break;
             }
 
@@ -249,14 +256,16 @@ namespace FMBot.Bot.Commands.LastFM
             }
             else
             {
-                var embedTitle = $"Your top {timeDescription} tracks for '{artist.ArtistName}'";
+                var embedTitle = contextUser.DiscordUserId == targetUser.DiscordUserId
+                    ? $"Your top {timeDescription} tracks for '{artist.ArtistName}'"
+                    : $"{invkContext.Target.Username}'s top {timeDescription} tracks for '{artist.ArtistName}', requested by {Context.User.Username}";
                 this._embed.WithTitle(embedTitle);
 
                 var footer = $"{userTitle} has {artist.UserPlaycount} total scrobbles on this artist";
                 this._embed.WithFooter(footer);
 
 
-                var url = $"{Constants.LastFMUserUrl}{contextUser.UserNameLastFM}/library/music/{UrlEncoder.Default.Encode(artist.ArtistName)}";
+                var url = $"{Constants.LastFMUserUrl}{targetUser.UserNameLastFM}/library/music/{UrlEncoder.Default.Encode(artist.ArtistName)}";
                 if (Uri.IsWellFormedUriString(url, UriKind.Absolute))
                 {
                     this._embed.WithUrl(url);

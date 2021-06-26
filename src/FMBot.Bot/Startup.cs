@@ -139,6 +139,7 @@ namespace FMBot.Bot
                 .AddSingleton<WhoKnowsArtistService>()
                 .AddSingleton<WhoKnowsPlayService>()
                 .AddSingleton<WhoKnowsTrackService>()
+                .AddSingleton<InvocationService>()
                 .AddSingleton<YoutubeService>() // Add random to the collection
                 .AddSingleton<IConfiguration>(this.Configuration) // Add the configuration to the collection
                 .AddHttpClient();
@@ -146,7 +147,7 @@ namespace FMBot.Bot
             // These services can only be added after the config is loaded
             services
                 .AddSingleton<InteractivityService>()
-                .AddSingleton(new InteractivityConfig { DefaultTimeout = TimeSpan.FromMinutes(3) }) 
+                .AddSingleton(new InteractivityConfig { DefaultTimeout = TimeSpan.FromMinutes(3) })
                 .AddSingleton<IndexRepository>()
                 .AddSingleton<UpdateRepository>()
                 .AddSingleton<IUpdateService, UpdateService>()

@@ -12,6 +12,7 @@ using FMBot.Bot.Resources;
 using FMBot.Bot.Services;
 using FMBot.Domain;
 using FMBot.Domain.Models;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Serilog;
 
@@ -27,6 +28,7 @@ namespace FMBot.Bot.Handlers
         private readonly IGuildDisabledCommandService _guildDisabledCommandService;
         private readonly IChannelDisabledCommandService _channelDisabledCommandService;
         private readonly IServiceProvider _provider;
+        private readonly InvocationService _invocationService;
         private readonly BotSettings _botSettings;
 
         // DiscordSocketClient, CommandService, IConfigurationRoot, and IServiceProvider are injected automatically from the IServiceProvider
@@ -39,6 +41,7 @@ namespace FMBot.Bot.Handlers
             IChannelDisabledCommandService channelDisabledCommandService,
             UserService userService,
             MusicBotService musicBotService,
+            InvocationService invocationService,
             IOptions<BotSettings> botSettings)
         {
             this._discord = discord;
@@ -49,6 +52,7 @@ namespace FMBot.Bot.Handlers
             this._channelDisabledCommandService = channelDisabledCommandService;
             this._userService = userService;
             this._musicBotService = musicBotService;
+            this._invocationService = invocationService;
             this._botSettings = botSettings.Value;
             this._discord.MessageReceived += OnMessageReceivedAsync;
         }
@@ -217,6 +221,57 @@ namespace FMBot.Bot.Handlers
                     context.LogCommandUsed(CommandResponse.NotSupportedInDm);
                     return;
                 }
+            }
+            if (
+                searchResult.Commands[0].Command.Attributes.OfType<Targetable>().Any() &&
+                context.Guild != null
+                )
+            {
+                var args = context.Message.Content.Substring(argPos).Split(" ");
+                var cleanArgs = args.Skip(1).ToArray();
+                SocketUser target = context.Message.Author;
+                foreach (string arg in args)
+                {
+                    if (!arg.StartsWith("<@") || !arg.EndsWith(">"))
+                    {
+                        continue;
+                    }
+                    var id = arg.Trim('@', '!', '<', '>');
+                    if (!ulong.TryParse(id, out var targetId))
+                    {
+                        continue;
+                    }
+                    var targetResult = context.Guild.Users.FirstOrDefault(u => u.Id == targetId);
+                    if (targetResult != null)
+                    {
+                        cleanArgs = cleanArgs.Except(new [] { arg }).ToArray();
+                        target = targetResult as SocketUser;
+                        break;
+                    }
+                    else
+                    {
+                        target = context.Message.Author;
+                    }
+                }
+                var invkContext = new FMBot.Bot.Models.InvocationContext {
+                    Target = target,
+                    CleanArgs = cleanArgs,
+                };
+                this._invocationService.SetContext(context.Message, invkContext);
+            }
+            if (
+                searchResult.Commands[0].Command.Attributes.OfType<Targetable>().Any() &&
+                context.Guild == null
+                )
+            {
+                var args = context.Message.Content.Substring(argPos).Split(" ");
+                var cleanArgs = args;
+                SocketUser target = context.Message.Author;
+                var invkContext = new FMBot.Bot.Models.InvocationContext {
+                    Target = target,
+                    CleanArgs = cleanArgs,
+                };
+                this._invocationService.SetContext(context.Message, invkContext);
             }
 
             var commandName = searchResult.Commands[0].Command.Name;

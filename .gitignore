@@ -30,3 +30,4 @@ Logs/
 packages/
 src/.vs/
 .vs/
+.vscode/

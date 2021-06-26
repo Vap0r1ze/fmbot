@@ -42,6 +42,7 @@ namespace FMBot.Bot.Commands.LastFM
         private readonly WhoKnowsArtistService _whoKnowsArtistService;
         private readonly WhoKnowsAlbumService _whoKnowsAlbumService;
         private readonly WhoKnowsTrackService _whoKnowsTrackService;
+        private InvocationService _invocationService;
         private InteractivityService Interactivity { get; }
 
         private static readonly List<DateTimeOffset> StackCooldownTimer = new();
@@ -62,6 +63,7 @@ namespace FMBot.Bot.Commands.LastFM
                 WhoKnowsArtistService whoKnowsArtistService,
                 WhoKnowsAlbumService whoKnowsAlbumService,
                 WhoKnowsTrackService whoKnowsTrackService,
+                InvocationService invocationService,
                 InteractivityService interactivity,
                 IOptions<BotSettings> botSettings) : base(botSettings)
         {
@@ -78,6 +80,7 @@ namespace FMBot.Bot.Commands.LastFM
             this._whoKnowsArtistService = whoKnowsArtistService;
             this._whoKnowsAlbumService = whoKnowsAlbumService;
             this._whoKnowsTrackService = whoKnowsTrackService;
+            this._invocationService = invocationService;
             this.Interactivity = interactivity;
         }
 
@@ -86,15 +89,17 @@ namespace FMBot.Bot.Commands.LastFM
         [Alias("np", "qm", "wm", "em", "rm", "tm", "ym", "om", "pm", "gm", "sm", "am", "hm", "jm", "km",
             "lm", "zm", "xm", "cm", "vm", "bm", "nm", "mm", "lastfm", "nowplaying")]
         [UsernameSetRequired]
+        [Targetable]
         public async Task NowPlayingAsync(params string[] parameters)
         {
-            var contextUser = await this._userService.GetUserSettingsAsync(this.Context.User);
+            var invkContext = this._invocationService.GetContext(this.Context.Message);
+            var contextUser = await this._userService.GetUserSettingsAsync(invkContext.Target);
             var prfx = this._prefixService.GetPrefix(this.Context.Guild?.Id);
 
             if (contextUser?.UserNameLastFM == null)
             {
-                var userNickname = (this.Context.User as SocketGuildUser)?.Nickname;
-                this._embed.UsernameNotSetErrorResponse(prfx, userNickname ?? this.Context.User.Username);
+                var userNickname = (invkContext.Target as SocketGuildUser)?.Nickname;
+                this._embed.UsernameNotSetErrorResponse(prfx, userNickname ?? invkContext.Target.Username);
 
                 await ReplyAsync("", false, this._embed.Build());
                 this.Context.LogCommandUsed(CommandResponse.UsernameNotSet);
@@ -213,7 +218,7 @@ namespace FMBot.Bot.Commands.LastFM
                 if (GenericEmbedService.RecentScrobbleCallFailed(recentTracks))
                 {
                     var listeningActivity =
-                        this.Context.User.Activities.FirstOrDefault(a => a.Type == ActivityType.Listening);
+                        invkContext.Target.Activities.FirstOrDefault(a => a.Type == ActivityType.Listening);
                     if (listeningActivity != null)
                     {
                         var spotifyActivity = (SpotifyGame)listeningActivity;
@@ -415,7 +420,7 @@ namespace FMBot.Bot.Commands.LastFM
 
                         if (embedType != FmEmbedType.EmbedTiny)
                         {
-                            this._embedAuthor.WithIconUrl(this.Context.User.GetAvatarUrl());
+                            this._embedAuthor.WithIconUrl(invkContext.Target.GetAvatarUrl());
                             this._embed.WithAuthor(this._embedAuthor);
                             this._embed.WithUrl(recentTracks.Content.UserUrl);
                         }
